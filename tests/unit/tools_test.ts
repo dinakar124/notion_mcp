@@ -31,17 +31,17 @@ class RecordingGateway implements NotionGateway {
   search(query: SearchQuery, context: RequestContext) {
     this.searches.push(query);
     this.contexts.push(context);
-    return this.delegate.search(query);
+    return this.delegate.search(query, context);
   }
   fetchPage(id: PageId, context: RequestContext) {
     this.fetches.push(id);
     this.contexts.push(context);
-    return this.delegate.fetchPage(id);
+    return this.delegate.fetchPage(id, context);
   }
   createPage(input: CreatePageInput, context: RequestContext) {
     this.creates.push(input);
     this.contexts.push(context);
-    return this.delegate.createPage(input);
+    return this.delegate.createPage(input, context);
   }
 }
 
