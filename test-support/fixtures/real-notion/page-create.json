@@ -1,0 +1,38 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:34Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "POST /v1/pages",
+    "sanitization": "all IDs and URLs redacted",
+    "description": "Successful child page creation under a page parent"
+  },
+  "object": "page",
+  "id": "[REDACTED-CREATED-PAGE-UUID]",
+  "created_time": "2026-10-09T08:34:00.000Z",
+  "last_edited_time": "2026-10-09T08:34:00.000Z",
+  "created_by": { "object": "user", "id": "[REDACTED-BOT-UUID]" },
+  "last_edited_by": { "object": "user", "id": "[REDACTED-BOT-UUID]" },
+  "cover": null,
+  "icon": null,
+  "parent": { "type": "page_id", "page_id": "[REDACTED-PARENT-PAGE-UUID]" },
+  "archived": false,
+  "in_trash": false,
+  "properties": {
+    "title": {
+      "id": "title",
+      "type": "title",
+      "title": [
+        {
+          "type": "text",
+          "text": { "content": "MCP Contract Test 2026-10-09T08:34:12", "link": null },
+          "plain_text": "MCP Contract Test 2026-10-09T08:34:12",
+          "href": null
+        }
+      ]
+    }
+  },
+  "url": "https://www.notion.so/[REDACTED]",
+  "public_url": null,
+  "request_id": "[REDACTED]"
+}

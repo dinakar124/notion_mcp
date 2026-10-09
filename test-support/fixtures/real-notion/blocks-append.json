@@ -1,0 +1,55 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:34Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "PATCH /v1/blocks/{block_id}/children",
+    "sanitization": "block IDs redacted",
+    "description": "Successful block append (paragraph + heading_2)"
+  },
+  "object": "list",
+  "results": [
+    {
+      "object": "block",
+      "id": "[REDACTED-BLOCK-1-UUID]",
+      "parent": { "type": "page_id", "page_id": "[REDACTED-PAGE-UUID]" },
+      "type": "paragraph",
+      "paragraph": {
+        "rich_text": [
+          {
+            "type": "text",
+            "text": { "content": "Contract test paragraph 2026-10-09T08:34:12", "link": null },
+            "plain_text": "Contract test paragraph 2026-10-09T08:34:12"
+          }
+        ],
+        "color": "default"
+      },
+      "archived": false,
+      "in_trash": false,
+      "has_children": false
+    },
+    {
+      "object": "block",
+      "id": "[REDACTED-BLOCK-2-UUID]",
+      "parent": { "type": "page_id", "page_id": "[REDACTED-PAGE-UUID]" },
+      "type": "heading_2",
+      "heading_2": {
+        "rich_text": [
+          {
+            "type": "text",
+            "text": { "content": "Test Heading", "link": null },
+            "plain_text": "Test Heading"
+          }
+        ],
+        "is_toggleable": false,
+        "color": "default"
+      },
+      "archived": false,
+      "in_trash": false,
+      "has_children": false
+    }
+  ],
+  "type": "block",
+  "block": {},
+  "request_id": "[REDACTED]"
+}

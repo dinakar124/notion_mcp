@@ -1,0 +1,39 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:34Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "GET /v1/pages/{page_id}",
+    "sanitization": "page_id, workspace_id, user IDs, URLs redacted",
+    "description": "Successful page read with workspace parent, title property, standard timestamps"
+  },
+  "object": "page",
+  "id": "[REDACTED-PAGE-UUID]",
+  "created_time": "2026-10-09T00:00:00.000Z",
+  "last_edited_time": "2026-10-09T00:00:00.000Z",
+  "created_by": { "object": "user", "id": "[REDACTED]" },
+  "last_edited_by": { "object": "user", "id": "[REDACTED]" },
+  "cover": null,
+  "icon": null,
+  "parent": { "type": "workspace", "workspace": true },
+  "archived": false,
+  "in_trash": false,
+  "properties": {
+    "title": {
+      "id": "title",
+      "type": "title",
+      "title": [
+        {
+          "type": "text",
+          "text": { "content": "Getting Started", "link": null },
+          "annotations": { "bold": false, "italic": false, "strikethrough": false, "underline": false, "code": false, "color": "default" },
+          "plain_text": "Getting Started",
+          "href": null
+        }
+      ]
+    }
+  },
+  "url": "https://www.notion.so/[REDACTED]",
+  "public_url": null,
+  "request_id": "[REDACTED]"
+}

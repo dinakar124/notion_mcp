@@ -1,0 +1,29 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:34Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "PATCH /v1/pages/{page_id} (archived: true)",
+    "sanitization": "IDs and URLs redacted",
+    "description": "Successful page archive showing archived=true, in_trash=true"
+  },
+  "object": "page",
+  "id": "[REDACTED-PAGE-UUID]",
+  "archived": true,
+  "in_trash": true,
+  "parent": { "type": "page_id", "page_id": "[REDACTED-PARENT-UUID]" },
+  "properties": {
+    "title": {
+      "id": "title",
+      "type": "title",
+      "title": [
+        {
+          "type": "text",
+          "text": { "content": "MCP Contract Test UPDATED 2026-10-09T08:34:12", "link": null },
+          "plain_text": "MCP Contract Test UPDATED 2026-10-09T08:34:12"
+        }
+      ]
+    }
+  },
+  "request_id": "[REDACTED]"
+}
