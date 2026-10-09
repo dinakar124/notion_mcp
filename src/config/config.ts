@@ -36,9 +36,12 @@ export const CONFIG_ENV_VARS = [
   'NOTION_MODE',
   'NOTION_TOKEN',
   'NOTION_API_BASE_URL',
+  'NOTION_ALLOW_LOOPBACK_BASE_URL',
   'NOTION_API_VERSION',
   'NOTION_TIMEOUT_MS',
 ] as const;
+
+const LOOPBACK_BASE_URL_FLAG = 'NOTION_ALLOW_LOOPBACK_BASE_URL';
 
 const DEFAULTS = {
   host: '127.0.0.1',
@@ -104,7 +107,11 @@ function loadRealNotionConfig(
     issues.push('NOTION_TOKEN must be 8-512 printable characters without whitespace');
   }
 
-  const baseUrl = normalizeBaseUrl(read('NOTION_API_BASE_URL') ?? DEFAULTS.baseUrl, issues);
+  const baseUrl = resolveBaseUrl(
+    read('NOTION_API_BASE_URL'),
+    read(LOOPBACK_BASE_URL_FLAG) === 'true',
+    issues,
+  );
 
   const apiVersion = read('NOTION_API_VERSION') ?? DEFAULTS.apiVersion;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(apiVersion)) {
@@ -122,7 +129,12 @@ function loadRealNotionConfig(
   return { mode: 'real', token, baseUrl, apiVersion, timeoutMs };
 }
 
-function normalizeBaseUrl(raw: string, issues: string[]): string | null {
+function resolveBaseUrl(
+  raw: string | undefined,
+  allowLoopback: boolean,
+  issues: string[],
+): string | null {
+  if (raw === undefined) return DEFAULTS.baseUrl;
   let url: URL;
   try {
     url = new URL(raw);
@@ -130,14 +142,29 @@ function normalizeBaseUrl(raw: string, issues: string[]): string | null {
     issues.push('NOTION_API_BASE_URL must be an absolute URL');
     return null;
   }
-  const loopback = LOOPBACK_HOSTS.has(url.hostname) || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
-    issues.push('NOTION_API_BASE_URL must use https (http is allowed for loopback only)');
-  }
   if (url.username || url.password || url.search || url.hash || url.pathname.replace(/\/$/, '')) {
     issues.push(
       'NOTION_API_BASE_URL must be an origin only: no credentials, path, query or fragment',
     );
+    return null;
+  }
+  if (url.origin === DEFAULTS.baseUrl) return url.origin;
+
+  // The bearer token goes to this origin, so only Notion itself or an explicit local test server qualifies.
+  if (!allowLoopback) {
+    issues.push(
+      `NOTION_API_BASE_URL must be ${DEFAULTS.baseUrl}; ` +
+        `a loopback test server needs ${LOOPBACK_BASE_URL_FLAG}=true`,
+    );
+    return null;
+  }
+  if (
+    !(url.protocol === 'http:' || url.protocol === 'https:') || !LOOPBACK_HOSTS.has(url.hostname)
+  ) {
+    issues.push(
+      `NOTION_API_BASE_URL must be a loopback origin when ${LOOPBACK_BASE_URL_FLAG}=true`,
+    );
+    return null;
   }
   return url.origin;
 }
