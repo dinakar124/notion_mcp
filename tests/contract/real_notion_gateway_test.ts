@@ -22,6 +22,8 @@ function gateway() {
   return createRealNotionGateway(config.notion, silentLogger);
 }
 
+const context = () => ({ signal: AbortSignal.timeout(30_000) });
+
 function parentPageId() {
   const id = tryParsePageId(env('NOTION_TEST_PARENT_PAGE_ID') ?? '');
   assert(id, 'NOTION_TEST_PARENT_PAGE_ID must be a page UUID');
@@ -32,7 +34,7 @@ Deno.test({
   name: 'contract: search returns mapped pages',
   ignore: !enabled,
   fn: async () => {
-    const result = await gateway().search({ query: '', limit: 5 });
+    const result = await gateway().search({ query: '', limit: 5 }, context());
     for (const page of result.pages) {
       assert(tryParsePageId(page.id) !== null);
       assert(page.url.startsWith('https://'));
@@ -44,7 +46,7 @@ Deno.test({
   name: 'contract: fetch returns the shared parent page with blocks',
   ignore: !enabled,
   fn: async () => {
-    const content = await gateway().fetchPage(parentPageId());
+    const content = await gateway().fetchPage(parentPageId(), context());
     assertEquals(content.page.id, parentPageId());
     assert(content.page.title.length > 0);
   },
@@ -59,8 +61,8 @@ Deno.test({
       parentPageId: parentPageId(),
       title: `notion-mcp contract ${new Date().toISOString()}`,
       paragraphs: ['Created by the notion-mcp contract test.'],
-    });
-    const fetched = await gw.fetchPage(created.id);
+    }, context());
+    const fetched = await gw.fetchPage(created.id, context());
     assertEquals(fetched.page.id, created.id);
     assertEquals(fetched.blocks[0]?.text, 'Created by the notion-mcp contract test.');
   },

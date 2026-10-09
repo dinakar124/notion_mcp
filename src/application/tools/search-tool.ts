@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { NotionGateway } from '../ports/notion-gateway.ts';
+import type { RequestContext } from '../request-context.ts';
 import { SchemaTool, type ToolOutput } from './tool.ts';
 
 const DEFAULT_LIMIT = 10;
@@ -35,12 +36,15 @@ export class NotionSearchTool extends SchemaTool<typeof searchSchema> {
     }, searchSchema);
   }
 
-  protected async run(input: z.output<typeof searchSchema>): Promise<ToolOutput> {
+  protected async run(
+    input: z.output<typeof searchSchema>,
+    context: RequestContext,
+  ): Promise<ToolOutput> {
     const results = await this.gateway.search({
       query: input.query,
       limit: input.limit,
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-    });
+    }, context);
     return {
       summary: `Found ${results.pages.length} page(s) matching "${input.query}".`,
       data: {

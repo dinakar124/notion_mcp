@@ -1,7 +1,12 @@
 import { z } from 'zod';
-import { ConfirmationRequiredError, InvalidArgumentsError } from '../../domain/errors.ts';
+import {
+  ConfirmationRequiredError,
+  InvalidArgumentsError,
+  requestCancelled,
+} from '../../domain/errors.ts';
 import { MAX_CREATE_BLOCKS, splitParagraphs } from '../../domain/notion.ts';
 import type { NotionGateway } from '../ports/notion-gateway.ts';
+import type { RequestContext } from '../request-context.ts';
 import { pageIdSchema } from './page-id-schema.ts';
 import { SchemaTool, type ToolOutput } from './tool.ts';
 
@@ -22,7 +27,8 @@ export class NotionCreatePageTool extends SchemaTool<typeof createSchema> {
       name: 'notion_create_page',
       title: 'Create a Notion page',
       description: 'Create a child page under an existing page. Writes only when confirm=true; ' +
-        'not idempotent, so repeating a call creates another page.',
+        'not idempotent, so repeating a call creates another page. If an error reports ' +
+        'outcomeUncertain=true, check whether the page exists before trying again.',
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -32,7 +38,10 @@ export class NotionCreatePageTool extends SchemaTool<typeof createSchema> {
     }, createSchema);
   }
 
-  protected async run(input: z.output<typeof createSchema>): Promise<ToolOutput> {
+  protected async run(
+    input: z.output<typeof createSchema>,
+    context: RequestContext,
+  ): Promise<ToolOutput> {
     if (input.confirm !== true) throw new ConfirmationRequiredError(this.definition.name);
 
     const paragraphs = splitParagraphs(input.content ?? '');
@@ -42,11 +51,14 @@ export class NotionCreatePageTool extends SchemaTool<typeof createSchema> {
       ]);
     }
 
+    // Last check before the side effect: a cancelled call must not reach the provider.
+    if (context.signal.aborted) throw requestCancelled(false);
+
     const page = await this.gateway.createPage({
       parentPageId: input.parent_page_id,
       title: input.title,
       paragraphs,
-    });
+    }, context);
     return {
       summary: `Created page "${page.title}".`,
       data: { created: true, page: { id: page.id, title: page.title, url: page.url } },

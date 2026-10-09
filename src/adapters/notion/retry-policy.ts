@@ -22,9 +22,9 @@ export const DEFAULT_RETRY_OPTIONS: RetryPolicyOptions = {
 };
 
 /**
- * Decides whether and when to retry. 429 is always safe (the request was not processed);
- * 503/529 and network failures are retried only for idempotent requests because the
- * provider may already have applied a write.
+ * Decides whether and when to retry. Only idempotent requests are ever retried, and only after
+ * a network failure or a 429, 503 or 529. A write is never retried: even a 429 does not prove
+ * the provider left the workspace untouched, and a repeat could create a duplicate.
  */
 export class RetryPolicy {
   private readonly random: () => number;
@@ -48,9 +48,8 @@ export class RetryPolicy {
   }
 
   private isRetryable({ status, idempotent }: RetryContext): boolean {
-    if (status === 429) return true;
-    if (status === undefined || status === 503 || status === 529) return idempotent;
-    return false;
+    if (!idempotent) return false;
+    return status === undefined || status === 429 || status === 503 || status === 529;
   }
 }
 

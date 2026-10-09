@@ -1,74 +1,25 @@
 import { assert, assertEquals, assertRejects } from '@std/assert';
-import { NotionHttpClient } from '../../src/adapters/notion/notion-http-client.ts';
 import { sanitizeRequestId } from '../../src/adapters/notion/notion-errors.ts';
 import { parseRetryAfterMs, RetryPolicy } from '../../src/adapters/notion/retry-policy.ts';
 import { ProviderError } from '../../src/domain/errors.ts';
-import { JsonLogger, type Logger } from '../../src/observability/logger.ts';
+import { JsonLogger } from '../../src/observability/logger.ts';
 import {
   handleRequest as notionFake,
   resetState as resetNotionFake,
 } from '../../test-support/notion-fake/server.ts';
-
-const TOKEN = 'secret_test_token_value_123';
-
-interface ScriptedReply {
-  status: number;
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
-/** Fetch stub that replays scripted replies (or throws) and records each request. */
-class ScriptedFetch {
-  readonly calls: Array<{ url: string; init: RequestInit }> = [];
-  constructor(private readonly script: Array<ScriptedReply | Error>) {}
-
-  readonly fetch: typeof fetch = (input, init) => {
-    this.calls.push({ url: String(input), init: init ?? {} });
-    const next = this.script.shift();
-    if (next === undefined) throw new Error('script exhausted');
-    if (next instanceof Error) return Promise.reject(next);
-    return Promise.resolve(
-      new Response(next.body === undefined ? '{}' : JSON.stringify(next.body), {
-        status: next.status,
-        headers: next.headers,
-      }),
-    );
-  };
-}
-
-function buildClient(fetchImpl: typeof fetch, logger: Logger = quietLogger()) {
-  const sleeps: number[] = [];
-  const client = new NotionHttpClient(
-    { baseUrl: 'https://api.notion.test', token: TOKEN, apiVersion: '2022-06-28', timeoutMs: 5000 },
-    {
-      fetch: fetchImpl,
-      sleep: (ms) => {
-        sleeps.push(ms);
-        return Promise.resolve();
-      },
-      retryPolicy: new RetryPolicy({
-        maxAttempts: 3,
-        baseDelayMs: 100,
-        maxDelayMs: 2000,
-        random: () => 1,
-      }),
-      logger,
-    },
-  );
-  return { client, sleeps };
-}
-
-function quietLogger(): Logger {
-  return new JsonLogger('error', () => {});
-}
-
-const read = { method: 'GET', path: '/v1/pages/x', idempotent: true } as const;
-const write = { method: 'POST', path: '/v1/pages', body: { a: 1 }, idempotent: false } as const;
+import {
+  buildClient,
+  liveSignal,
+  readRequest as read,
+  ScriptedFetch,
+  TOKEN,
+  writeRequest as write,
+} from '../support/notion-client-harness.ts';
 
 Deno.test('client: sends auth, version and JSON headers, returns parsed body', async () => {
   const script = new ScriptedFetch([{ status: 200, body: { ok: true } }]);
   const { client } = buildClient(script.fetch);
-  assertEquals(await client.request(write), { ok: true });
+  assertEquals(await client.request(write, liveSignal()), { ok: true });
 
   const { url, init } = script.calls[0]!;
   const headers = init.headers as Record<string, string>;
@@ -80,16 +31,30 @@ Deno.test('client: sends auth, version and JSON headers, returns parsed body', a
   assertEquals(init.redirect, 'error');
 });
 
-Deno.test('client: 429 is retried for reads and writes, honouring a bounded Retry-After', async () => {
-  for (const request of [read, write]) {
-    const script = new ScriptedFetch([
-      { status: 429, headers: { 'retry-after': '1' } },
-      { status: 200, body: { done: true } },
-    ]);
-    const { client, sleeps } = buildClient(script.fetch);
-    assertEquals(await client.request(request), { done: true });
-    assertEquals(sleeps, [1000]);
-  }
+Deno.test('client: 429 on a read is retried, honouring a bounded Retry-After', async () => {
+  const script = new ScriptedFetch([
+    { status: 429, headers: { 'retry-after': '1' } },
+    { status: 200, body: { done: true } },
+  ]);
+  const { client, sleeps } = buildClient(script.fetch);
+  assertEquals(await client.request(read, liveSignal()), { done: true });
+  assertEquals(sleeps, [1000]);
+  assertEquals(script.calls.length, 2);
+});
+
+Deno.test('client: 429 on a write sends exactly one POST and reports an uncertain outcome', async () => {
+  const script = new ScriptedFetch([
+    { status: 429, headers: { 'retry-after': '1', 'x-notion-request-id': 'req-w' } },
+    { status: 200, body: { id: 'duplicate' } },
+  ]);
+  const { client, sleeps } = buildClient(script.fetch);
+  const error = await assertRejects(() => client.request(write, liveSignal()), ProviderError);
+  assertEquals(script.calls.length, 1);
+  assertEquals(sleeps, []);
+  assertEquals(
+    [error.kind, error.outcomeUncertain, error.retryable, error.retryAfterMs, error.requestId],
+    ['rate_limited', true, false, 1000, 'req-w'],
+  );
 });
 
 Deno.test('client: Retry-After beyond the cap is not waited for; error carries retryAfterMs', async () => {
@@ -98,7 +63,7 @@ Deno.test('client: Retry-After beyond the cap is not waited for; error carries r
     headers: { 'retry-after': '120', 'x-notion-request-id': 'req-1' },
   }]);
   const { client, sleeps } = buildClient(script.fetch);
-  const error = await assertRejects(() => client.request(read), ProviderError);
+  const error = await assertRejects(() => client.request(read, liveSignal()), ProviderError);
   assertEquals([error.kind, error.retryable, error.retryAfterMs, error.requestId], [
     'rate_limited',
     true,
@@ -113,26 +78,36 @@ Deno.test('client: 503 and 529 are retried for idempotent reads, then give up af
   for (const status of [503, 529]) {
     const script = new ScriptedFetch([{ status }, { status }, { status }]);
     const { client, sleeps } = buildClient(script.fetch);
-    const error = await assertRejects(() => client.request(read), ProviderError);
-    assertEquals([error.kind, error.retryable], ['unavailable', true]);
+    const error = await assertRejects(() => client.request(read, liveSignal()), ProviderError);
+    assertEquals([error.kind, error.retryable, error.outcomeUncertain], [
+      'unavailable',
+      true,
+      false,
+    ]);
     assertEquals(script.calls.length, 3);
     assertEquals(sleeps.length, 2);
     assert(sleeps.every((ms) => ms <= 2000));
   }
 });
 
-Deno.test('client: 503 on a write is NOT retried and is flagged outcome-uncertain', async () => {
-  const script = new ScriptedFetch([{ status: 503 }, { status: 200, body: {} }]);
-  const { client } = buildClient(script.fetch);
-  const error = await assertRejects(() => client.request(write), ProviderError);
-  assertEquals(script.calls.length, 1);
-  assertEquals([error.outcomeUncertain, error.retryable], [true, false]);
+Deno.test('client: a write is sent once and uncertain unless the status proves rejection', async () => {
+  const uncertain = [409, 429, 500, 502, 503, 504, 529];
+  const rejected = [400, 401, 403, 404];
+  for (const status of [...uncertain, ...rejected]) {
+    const script = new ScriptedFetch([{ status }, { status: 200, body: {} }]);
+    const { client, sleeps } = buildClient(script.fetch);
+    const error = await assertRejects(() => client.request(write, liveSignal()), ProviderError);
+    assertEquals(script.calls.length, 1, `status ${status}`);
+    assertEquals(sleeps, [], `status ${status}`);
+    assertEquals(error.outcomeUncertain, uncertain.includes(status), `status ${status}`);
+    assertEquals(error.retryable && error.outcomeUncertain, false, `status ${status}`);
+  }
 });
 
-Deno.test('client: network failure on a write is not retried; on a read it is', async () => {
+Deno.test('client: network failure on a write is uncertain and not retried; on a read it is retried', async () => {
   const writeScript = new ScriptedFetch([new TypeError('connection reset')]);
   const writeError = await assertRejects(
-    () => buildClient(writeScript.fetch).client.request(write),
+    () => buildClient(writeScript.fetch).client.request(write, liveSignal()),
     ProviderError,
   );
   assertEquals([writeScript.calls.length, writeError.kind, writeError.outcomeUncertain], [
@@ -142,17 +117,42 @@ Deno.test('client: network failure on a write is not retried; on a read it is', 
   ]);
 
   const readScript = new ScriptedFetch([new TypeError('reset'), { status: 200, body: { ok: 1 } }]);
-  assertEquals(await buildClient(readScript.fetch).client.request(read), { ok: 1 });
+  assertEquals(
+    await buildClient(readScript.fetch).client.request(read, liveSignal()),
+    { ok: 1 },
+  );
 });
 
-Deno.test('client: timeouts map to a timeout error', async () => {
-  const timeout = new DOMException('timed out', 'TimeoutError');
-  const script = new ScriptedFetch([timeout]);
-  const error = await assertRejects(
-    () => buildClient(script.fetch).client.request(write),
+Deno.test('client: a timeout maps to a timeout error that is uncertain for writes only', async () => {
+  const timeout = () => new DOMException('timed out', 'TimeoutError');
+  const writeError = await assertRejects(
+    () => buildClient(new ScriptedFetch([timeout()]).fetch).client.request(write, liveSignal()),
     ProviderError,
   );
-  assertEquals(error.kind, 'timeout');
+  assertEquals([writeError.kind, writeError.outcomeUncertain], ['timeout', true]);
+
+  const readScript = new ScriptedFetch([timeout(), timeout(), timeout()]);
+  const readError = await assertRejects(
+    () => buildClient(readScript.fetch).client.request(read, liveSignal()),
+    ProviderError,
+  );
+  assertEquals([readError.kind, readError.outcomeUncertain, readScript.calls.length], [
+    'timeout',
+    false,
+    3,
+  ]);
+});
+
+Deno.test('client: the configured timeout fires even when the caller never cancels', async () => {
+  const hangUntilAborted: typeof fetch = (_input, init) =>
+    new Promise((_resolve, reject) => {
+      init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason));
+    });
+  const error = await assertRejects(
+    () => buildClient(hangUntilAborted, { timeoutMs: 20 }).client.request(write, liveSignal()),
+    ProviderError,
+  );
+  assertEquals([error.kind, error.outcomeUncertain], ['timeout', true]);
 });
 
 Deno.test('client: status codes map to typed kinds without retrying client errors', async () => {
@@ -169,7 +169,7 @@ Deno.test('client: status codes map to typed kinds without retrying client error
       body: { code: 'object_not_found', message: 'private detail' },
     }]);
     const error = await assertRejects(
-      () => buildClient(script.fetch).client.request(read),
+      () => buildClient(script.fetch).client.request(read, liveSignal()),
       ProviderError,
     );
     assertEquals(error.kind, kind);
@@ -184,7 +184,7 @@ Deno.test('client: upstream messages and unsafe request ids are never copied int
     headers: { 'x-notion-request-id': 'bad id; with spaces' },
   }]);
   const error = await assertRejects(
-    () => buildClient(script.fetch).client.request(read),
+    () => buildClient(script.fetch).client.request(read, liveSignal()),
     ProviderError,
   );
   assertEquals(error.requestId, undefined);
@@ -193,16 +193,87 @@ Deno.test('client: upstream messages and unsafe request ids are never copied int
   assertEquals(error.message.includes('validation_error'), true);
 });
 
-Deno.test('client: non-JSON success bodies become bad_response', async () => {
-  const fetchImpl: typeof fetch = () =>
+Deno.test('client: a non-JSON success body is bad_response, uncertain only for a write', async () => {
+  const html: typeof fetch = () =>
     Promise.resolve(
       new Response('<html>', { status: 200, headers: { 'x-notion-request-id': 'req-9' } }),
     );
-  const error = await assertRejects(
-    () => buildClient(fetchImpl).client.request(read),
+  const readError = await assertRejects(
+    () => buildClient(html).client.request(read, liveSignal()),
     ProviderError,
   );
-  assertEquals([error.kind, error.requestId], ['bad_response', 'req-9']);
+  assertEquals([readError.kind, readError.requestId, readError.outcomeUncertain], [
+    'bad_response',
+    'req-9',
+    false,
+  ]);
+  const writeError = await assertRejects(
+    () => buildClient(html).client.request(write, liveSignal()),
+    ProviderError,
+  );
+  assertEquals([writeError.kind, writeError.outcomeUncertain], ['bad_response', true]);
+});
+
+Deno.test('client: a signal aborted before the call sends nothing', async () => {
+  for (const request of [read, write]) {
+    const script = new ScriptedFetch([{ status: 200, body: {} }]);
+    const error = await assertRejects(
+      () => buildClient(script.fetch).client.request(request, AbortSignal.abort()),
+      ProviderError,
+    );
+    assertEquals(script.calls.length, 0);
+    assertEquals([error.kind, error.outcomeUncertain], ['cancelled', false]);
+  }
+});
+
+Deno.test('client: the caller signal is combined with the timeout and reaches fetch', async () => {
+  const controller = new AbortController();
+  const script = new ScriptedFetch([{ status: 200, body: {} }]);
+  await buildClient(script.fetch).client.request(read, controller.signal);
+
+  const sent = script.calls[0]!.init.signal!;
+  assertEquals(sent.aborted, false);
+  assert(sent !== controller.signal);
+  controller.abort();
+  assertEquals(sent.aborted, true);
+});
+
+Deno.test('client: abort after a write was transmitted is uncertain and never retried', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const abortMidFlight: typeof fetch = (_input, init) => {
+    calls++;
+    controller.abort();
+    return Promise.reject(init!.signal!.reason);
+  };
+  const { client, sleeps } = buildClient(abortMidFlight);
+  const error = await assertRejects(() => client.request(write, controller.signal), ProviderError);
+  assertEquals(calls, 1);
+  assertEquals(sleeps, []);
+  assertEquals([error.kind, error.outcomeUncertain, error.retryable], ['cancelled', true, false]);
+});
+
+Deno.test('client: abort during a read is not retried and is not uncertain', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const abortMidFlight: typeof fetch = (_input, init) => {
+    calls++;
+    controller.abort();
+    return Promise.reject(init!.signal!.reason);
+  };
+  const { client, sleeps } = buildClient(abortMidFlight);
+  const error = await assertRejects(() => client.request(read, controller.signal), ProviderError);
+  assertEquals([calls, sleeps.length], [1, 0]);
+  assertEquals([error.kind, error.outcomeUncertain], ['cancelled', false]);
+});
+
+Deno.test('client: abort while waiting to retry a read stops before the next attempt', async () => {
+  const controller = new AbortController();
+  const script = new ScriptedFetch([{ status: 503 }, { status: 200, body: { late: true } }]);
+  const { client, sleeps } = buildClient(script.fetch, { onSleep: () => controller.abort() });
+  const error = await assertRejects(() => client.request(read, controller.signal), ProviderError);
+  assertEquals([script.calls.length, sleeps.length], [1, 1]);
+  assertEquals(error.kind, 'cancelled');
 });
 
 Deno.test('client: retry logging never contains the token', async () => {
@@ -211,7 +282,7 @@ Deno.test('client: retry logging never contains the token', async () => {
   const script = new ScriptedFetch([{ status: 429, headers: { 'retry-after': '1' } }, {
     status: 200,
   }]);
-  await buildClient(script.fetch, logger).client.request(read);
+  await buildClient(script.fetch, { logger }).client.request(read, liveSignal());
   assert(lines.length > 0);
   assertEquals(lines.some((line) => line.includes(TOKEN)), false);
 });
@@ -236,7 +307,7 @@ Deno.test('client against the in-process Notion fake: injected 429/503/529 are c
       (input, init) =>
         fakeFetch(String(input).replace('https://api.notion.test', 'http://fake'), init),
     );
-    const error = await assertRejects(() => client.request(read), ProviderError);
+    const error = await assertRejects(() => client.request(read, liveSignal()), ProviderError);
     assertEquals(error.kind, kind);
   }
   resetNotionFake();
@@ -256,6 +327,24 @@ Deno.test('retry policy: exponential backoff is capped and jittered deterministi
   assertEquals(policy.delayBeforeRetry({ attempt: 5, status: 503, idempotent: true }), null);
   assertEquals(policy.delayBeforeRetry({ attempt: 1, status: 500, idempotent: true }), null);
   assertEquals(policy.delayBeforeRetry({ attempt: 1, status: 404, idempotent: true }), null);
+});
+
+Deno.test('retry policy: only idempotent requests retry; a write never does, whatever the failure', () => {
+  const policy = new RetryPolicy({ maxAttempts: 5, baseDelayMs: 100, maxDelayMs: 500 });
+  for (const status of [undefined, 429, 503, 529]) {
+    assertEquals(
+      policy.delayBeforeRetry({ attempt: 1, status, idempotent: true }) !== null,
+      true,
+      `read ${status}`,
+    );
+  }
+  for (const status of [undefined, 409, 429, 500, 502, 503, 504, 529]) {
+    assertEquals(
+      policy.delayBeforeRetry({ attempt: 1, status, idempotent: false, retryAfterHeader: '0' }),
+      null,
+      `write ${status}`,
+    );
+  }
 });
 
 Deno.test('Retry-After parsing accepts seconds only and sanitizeRequestId accepts tokens only', () => {

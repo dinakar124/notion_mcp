@@ -38,7 +38,7 @@ export class McpRoute implements Route {
       requestId = extractId(body);
       const mcpRequest = this.parser.parse(request.headers, body);
       method = mcpRequest.method;
-      const result = await this.dispatcher.dispatch(mcpRequest);
+      const result = await this.dispatcher.dispatch(mcpRequest, { signal: request.signal });
       this.logger.info('mcp.request', {
         method,
         outcome: 'ok',

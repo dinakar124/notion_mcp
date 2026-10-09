@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { InvalidArgumentsError } from '../../domain/errors.ts';
 import type { JsonObject } from '../../domain/json.ts';
+import type { RequestContext } from '../request-context.ts';
 
 export interface ToolAnnotations {
   readonly readOnlyHint: boolean;
@@ -27,7 +28,7 @@ export interface ToolOutput {
 /** A callable capability exposed over MCP. Implementations validate their own arguments. */
 export interface Tool {
   readonly definition: ToolDefinition;
-  execute(args: unknown): Promise<ToolOutput>;
+  execute(args: unknown, context: RequestContext): Promise<ToolOutput>;
 }
 
 export type ToolMetadata = Omit<ToolDefinition, 'inputSchema'>;
@@ -44,7 +45,7 @@ export abstract class SchemaTool<S extends z.ZodType> implements Tool {
     this.definition = { ...metadata, inputSchema: inputSchema as JsonObject };
   }
 
-  execute(args: unknown): Promise<ToolOutput> {
+  execute(args: unknown, context: RequestContext): Promise<ToolOutput> {
     const parsed = this.schema.safeParse(args);
     if (!parsed.success) {
       const issues = parsed.error.issues.map((issue) =>
@@ -54,8 +55,8 @@ export abstract class SchemaTool<S extends z.ZodType> implements Tool {
         new InvalidArgumentsError(`Invalid arguments for ${this.definition.name}`, issues),
       );
     }
-    return this.run(parsed.data as z.output<S>);
+    return this.run(parsed.data as z.output<S>, context);
   }
 
-  protected abstract run(input: z.output<S>): Promise<ToolOutput>;
+  protected abstract run(input: z.output<S>, context: RequestContext): Promise<ToolOutput>;
 }

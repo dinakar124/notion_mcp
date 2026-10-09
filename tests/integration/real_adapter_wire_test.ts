@@ -132,3 +132,95 @@ Deno.test('real adapter wire: write that hits 503 reports uncertain outcome and 
   assertEquals(body.result.structuredContent.error.outcomeUncertain, true);
   assertEquals(body.result.structuredContent.error.retryable, false);
 });
+
+Deno.test('real adapter wire: write that hits 429 is posted once and reported as uncertain', async () => {
+  const { client, requests } = wiredClient(() =>
+    new Response(JSON.stringify({ code: 'rate_limited' }), {
+      status: 429,
+      headers: { 'retry-after': '1' },
+    })
+  );
+  const { body } = await client.callTool('notion_create_page', {
+    parent_page_id: PAGE_ID,
+    title: 'T',
+    confirm: true,
+  });
+  const error = body.result.structuredContent.error;
+  assertEquals(requests.length, 1);
+  assertEquals(
+    [error.code, error.outcomeUncertain, error.retryable, error.retryAfterMs],
+    ['PROVIDER_RATE_LIMITED', true, false, 1000],
+  );
+});
+
+Deno.test('real adapter wire: a read that hits 429 is retried and succeeds', async () => {
+  let calls = 0;
+  const { client, requests } = wiredClient(() =>
+    ++calls === 1
+      ? new Response('{}', { status: 429, headers: { 'retry-after': '1' } })
+      : json({ object: 'list', results: [], has_more: false, next_cursor: null })
+  );
+  const { body } = await client.callTool('notion_search', { query: 'x' });
+  assertEquals(body.result.isError, false);
+  assertEquals(requests.length, 2);
+});
+
+Deno.test('real adapter wire: a client that is already gone causes no create request', async () => {
+  const { client, requests } = wiredClient(() => json(notionPage('Created')));
+  const { body } = await client.callTool(
+    'notion_create_page',
+    { parent_page_id: PAGE_ID, title: 'T', confirm: true },
+    { signal: AbortSignal.abort() },
+  );
+  const error = body.result.structuredContent.error;
+  assertEquals(requests.length, 0);
+  assertEquals([error.code, error.outcomeUncertain], ['PROVIDER_CANCELLED', false]);
+});
+
+Deno.test('real adapter wire: disconnect after the write was sent is uncertain and never retried', async () => {
+  const controller = new AbortController();
+  const { client, requests } = wiredClient(() => {
+    controller.abort();
+    throw controller.signal.reason;
+  });
+  const { body } = await client.callTool(
+    'notion_create_page',
+    { parent_page_id: PAGE_ID, title: 'T', confirm: true },
+    { signal: controller.signal },
+  );
+  const error = body.result.structuredContent.error;
+  assertEquals(requests.length, 1);
+  assertEquals(
+    [error.code, error.outcomeUncertain, error.retryable],
+    ['PROVIDER_CANCELLED', true, false],
+  );
+});
+
+Deno.test('real adapter wire: created page whose response cannot be read is an uncertain bad_response', async () => {
+  const { client, requests } = wiredClient(() => json({ object: 'page' }));
+  const { body } = await client.callTool('notion_create_page', {
+    parent_page_id: PAGE_ID,
+    title: 'T',
+    confirm: true,
+  });
+  const error = body.result.structuredContent.error;
+  assertEquals(requests.length, 1);
+  assertEquals([error.code, error.outcomeUncertain], ['PROVIDER_BAD_RESPONSE', true]);
+});
+
+Deno.test('real adapter wire: a text block without rich_text fails the fetch as bad_response', async () => {
+  const { client } = wiredClient((url) =>
+    url.pathname.endsWith('/children')
+      ? json({
+        results: [{ id: 'b1', type: 'paragraph', has_children: false }],
+        has_more: false,
+        next_cursor: null,
+      })
+      : json(notionPage('Fetched'))
+  );
+  const { body } = await client.callTool('notion_fetch_page', { page_id: PAGE_ID });
+  assertEquals(
+    [body.result.isError, body.result.structuredContent.error.code],
+    [true, 'PROVIDER_BAD_RESPONSE'],
+  );
+});
