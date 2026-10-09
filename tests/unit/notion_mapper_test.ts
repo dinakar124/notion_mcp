@@ -108,6 +108,48 @@ Deno.test('mapBlockChildren: maps text blocks, flags unsupported ones, reports t
   ]);
 });
 
+Deno.test('mapBlockChildren: a text block with missing or malformed rich_text is bad_response, never empty text', () => {
+  const block = (type: string, payload: Record<string, unknown>) => ({
+    results: [{ id: 'x', type, has_children: false, ...payload }],
+    has_more: false,
+    next_cursor: null,
+  });
+  const malformed: Array<[string, unknown]> = [
+    ['paragraph', block('paragraph', {})],
+    ['paragraph', block('paragraph', { paragraph: null })],
+    ['paragraph', block('paragraph', { paragraph: {} })],
+    ['heading_1', block('heading_1', { heading_1: { rich_text: 'text' } })],
+    ['to_do', block('to_do', { to_do: { rich_text: [{ type: 'text' }] } })],
+    ['code', block('code', { code: { rich_text: [{ plain_text: 5 }] } })],
+    ['callout', block('callout', { callout: { rich_text: null } })],
+    ['quote', block('quote', { paragraph: { rich_text: [] } })],
+  ];
+  for (const [type, raw] of malformed) {
+    const error = assertThrows(() => mapBlockChildren(raw), ProviderError, undefined, type);
+    assertEquals([error.kind, error.code, error.message, error.outcomeUncertain], [
+      'bad_response',
+      'PROVIDER_BAD_RESPONSE',
+      'Notion returned a response this server could not understand.',
+      false,
+    ]);
+  }
+});
+
+Deno.test('mapBlockChildren: one malformed block fails the whole page instead of hiding content', () => {
+  const good = {
+    id: 'a',
+    type: 'paragraph',
+    has_children: false,
+    paragraph: { rich_text: [{ plain_text: 'kept' }] },
+  };
+  const bad = { id: 'b', type: 'paragraph', has_children: false };
+  const error = assertThrows(
+    () => mapBlockChildren({ results: [good, bad], has_more: false, next_cursor: null }),
+    ProviderError,
+  );
+  assertEquals(error.kind, 'bad_response');
+});
+
 Deno.test('mappers: malformed provider payloads become bad_response errors', () => {
   for (
     const call of [

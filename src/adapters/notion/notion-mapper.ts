@@ -9,6 +9,7 @@ import {
   type PageSummary,
   tryParsePageId,
 } from '../../domain/notion.ts';
+import { badResponse } from './notion-errors.ts';
 import {
   blockChildrenSchema,
   blockTextSchema,
@@ -76,10 +77,11 @@ function mapBlock(raw: NotionBlock): ContentBlock {
     return { id: raw.id, type: 'unsupported', text: '', hasChildren: raw.has_children };
   }
   const payload = blockTextSchema.safeParse(raw[raw.type]);
+  if (!payload.success) throw badResponse();
   return {
     id: raw.id,
     type: raw.type as ContentBlockType,
-    text: payload.success ? payload.data.rich_text.map((part) => part.plain_text).join('') : '',
+    text: payload.data.rich_text.map((part) => part.plain_text).join(''),
     hasChildren: raw.has_children,
   };
 }
