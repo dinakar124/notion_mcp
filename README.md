@@ -132,11 +132,17 @@ Configuration (all optional unless noted):
 | `LOG_LEVEL`           | `info`                   | `debug`, `info`, `warn`, `error`; JSON lines on stderr                                         |
 | `NOTION_MODE`         | `fake`                   | `fake` or `real`                                                                               |
 | `NOTION_TOKEN`        | –                        | Required in real mode; never logged or echoed in errors                                        |
-| `NOTION_API_BASE_URL` | `https://api.notion.com` | Origin only; HTTPS required (HTTP allowed for loopback test servers)                           |
+| `NOTION_API_BASE_URL` | `https://api.notion.com` | Must be exactly `https://api.notion.com`; any other origin is refused (see below)               |
+| `NOTION_ALLOW_LOOPBACK_BASE_URL` | unset         | Dev/test only. Set to `true` to let `NOTION_API_BASE_URL` be a **loopback** origin (`127.0.0.1`, `localhost`, `[::1]`); external origins stay refused |
 | `NOTION_API_VERSION`  | `2022-06-28`             | `YYYY-MM-DD`                                                                                   |
 | `NOTION_TIMEOUT_MS`   | `10000`                  | 1000–60000                                                                                     |
 
 Invalid configuration prints every problem at once and exits with status 2.
+
+The integration token is sent as a bearer credential to the configured Notion origin, so real mode
+only ever talks to `https://api.notion.com`. Pointing it at a local fake needs the explicit
+`NOTION_ALLOW_LOOPBACK_BASE_URL=true` and a loopback origin; a configuration error never echoes the
+rejected URL or the token.
 
 ## Architecture
 
@@ -175,10 +181,10 @@ sequenceDiagram
   R->>R: origin, content type, accept, body size
   R->>P: parse(headers, body)
   P-->>R: McpRequest or McpProtocolError
-  R->>H: dispatch
-  H->>T: execute(arguments)
-  T->>T: zod validation, confirm check
-  T->>G: search / fetchPage / createPage
+  R->>H: dispatch (request signal)
+  H->>T: execute(arguments, context)
+  T->>T: zod validation, confirm check, abort check
+  T->>G: search / fetchPage / createPage (context)
   G-->>T: domain values or ProviderError
   T-->>H: ToolOutput or AppError
   H-->>R: result (isError for tool failures)
@@ -213,12 +219,24 @@ sequenceDiagram
 
 - Protocol problems (bad headers, unknown tool, invalid arguments) are JSON-RPC errors with a 4xx
   status.
-- Failures inside a tool (`CONFIRMATION_REQUIRED`, `PROVIDER_NOT_FOUND`, `PROVIDER_RATE_LIMITED`, …)
-  are normal results with `isError: true` and a typed `structuredContent.error`, so a model can
-  react to them. Messages are written by this server; upstream message text is never forwarded.
-- The Notion client retries `429` (honouring a bounded `Retry-After`) and, for reads only, `503`,
-  `529` and network errors. A failed **write** is never retried and is reported with
-  `outcomeUncertain: true` when the provider may have applied it.
+- Failures inside a tool (`CONFIRMATION_REQUIRED`, `PROVIDER_NOT_FOUND`, `PROVIDER_RATE_LIMITED`,
+  `PROVIDER_CANCELLED`, …) are normal results with `isError: true` and a typed
+  `structuredContent.error`, so a model can react to them. Messages are written by this server;
+  upstream message text is never forwarded.
+- Retries apply to **idempotent reads only** (search, fetch): the Notion client retries `429`
+  (honouring a bounded `Retry-After`), `503`, `529` and network errors. A **write**
+  (`notion_create_page`) is sent exactly once, whatever fails – including `429`, because that does
+  not prove Notion left the workspace untouched. Unless the status proves rejection (`400`, `401`,
+  `403`, `404`), a failed write is reported with `outcomeUncertain: true` and `retryable: false`: the
+  page may exist, so check before creating it again. A `2xx` whose body cannot be read is also
+  `outcomeUncertain`.
+- Cancellation: the inbound request's `AbortSignal` is passed explicitly through the route,
+  dispatcher, tool and gateway to the Notion request, combined with the request timeout. A
+  confirmed create checks the signal immediately before sending; a call cancelled earlier sends
+  nothing (`PROVIDER_CANCELLED`, `outcomeUncertain: false`). Cancellation after the request was
+  transmitted is `PROVIDER_CANCELLED` with `outcomeUncertain: true` and is never retried.
+- A text block whose `rich_text` is missing or malformed fails the fetch with
+  `PROVIDER_BAD_RESPONSE`; it is never shown as an empty paragraph.
 
 ## Testing
 
@@ -246,7 +264,11 @@ socket. Real-workspace tests live in `tests/contract/` and need
   never appears in error messages. Outbound requests do not follow redirects.
 - Writes require `confirm=true`. The flag is a guard against accidental calls by the model, not
   proof of human approval – a real approval flow (MRTR elicitation) is not implemented.
-- Dev tasks run Deno with narrow permissions (specific env vars, loopback and `api.notion.com`).
+- Dev tasks and `deno task build` (`deno compile`) run with narrow permissions: only the
+  configuration variables, and network access to loopback plus (for `dev:real` and `build`)
+  `api.notion.com`. A unit test keeps the task permissions in sync with `CONFIG_ENV_VARS`.
+- The token is only ever sent to `https://api.notion.com` (or to a loopback test server when
+  `NOTION_ALLOW_LOOPBACK_BASE_URL=true`), never to another configured host.
 
 ## Implemented vs designed
 
