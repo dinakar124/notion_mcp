@@ -235,6 +235,11 @@ sequenceDiagram
   confirmed create checks the signal immediately before sending; a call cancelled earlier sends
   nothing (`PROVIDER_CANCELLED`, `outcomeUncertain: false`). Cancellation after the request was
   transmitted is `PROVIDER_CANCELLED` with `outcomeUncertain: true` and is never retried.
+  **MVP limitation:** propagation is proven in-process (an aborted `Request.signal` reaches the
+  Notion transport and stops the call), but a real-socket test of a client disconnecting mid-call
+  did not see the upstream signal abort within 3 s, so end-to-end disconnect detection by
+  `Deno.serve` is not verified. Writes stay safe regardless: they are sent at most once, and one
+  that times out is reported as uncertain.
 - A text block whose `rich_text` is missing or malformed fails the fetch with
   `PROVIDER_BAD_RESPONSE`; it is never shown as an empty paragraph.
 
