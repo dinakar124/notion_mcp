@@ -1,0 +1,52 @@
+{
+  "description": "Project-local scanner toolchain manifest. Single source of truth for tool URL, version, SHA-256, and binary name.",
+  "arch": "darwin_arm64",
+  "install_prefix": ".tools/bin",
+  "tools": {
+    "gitleaks": {
+      "version": "8.30.1",
+      "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz",
+      "sha256": "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5",
+      "binary": "gitleaks",
+      "binary_sha256": "ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f",
+      "version_cmd": "version",
+      "version_match": "8.30.1"
+    },
+    "trivy": {
+      "version": "0.75.0",
+      "url": "https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_macOS-ARM64.tar.gz",
+      "sha256": "4a77108cccf8e55c8d6823e1e759939a622277e66cd0daa3c1fc621ed69e4568",
+      "binary": "trivy",
+      "binary_sha256": "32b84c068e11e5381fc85d3fe2e8ac238659ab22524ce1b2b9dfcbd0b1f7331a",
+      "version_cmd": "version",
+      "version_match": "0.75.0"
+    },
+    "syft": {
+      "version": "1.54.1",
+      "url": "https://github.com/anchore/syft/releases/download/v1.54.1/syft_1.54.1_darwin_arm64.tar.gz",
+      "sha256": "b4319c3abaa87a0170ab76ee83ea2260ca34b53aecfa3ab0dd5428d2319d744f",
+      "binary": "syft",
+      "binary_sha256": "bc08d98ac3ca9cf475952b8eab22dfda70f3ab475ceb4e0113b9f77b24b75e26",
+      "version_cmd": "version",
+      "version_match": "1.54.1"
+    },
+    "actionlint": {
+      "version": "1.7.12",
+      "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz",
+      "sha256": "aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f",
+      "binary": "actionlint",
+      "binary_sha256": "8db11704dc296f096216db4db65d86cd7f0ebfdf4c38453a1da276b137b88388",
+      "version_cmd": "--version",
+      "version_match": "1.7.12"
+    },
+    "shellcheck": {
+      "version": "0.11.0",
+      "url": "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.gz",
+      "sha256": "339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f",
+      "binary": "shellcheck",
+      "binary_sha256": "61c17246d69f012cd458ae82f244c46023dac75d1b69733ca1cc7d28fb270fd7",
+      "version_cmd": "--version",
+      "version_match": "0.11.0"
+    }
+  }
+}

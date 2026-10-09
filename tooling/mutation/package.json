@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "notion-mcp-mutation-tooling",
+  "description": "Isolated Stryker mutation testing tooling for notion-mcp (Stage 0). Pinned to v9 for exact Node 23.7 engine compatibility (v10 transitive Babel 8 requires ^22.18 || >=24.11).",
+  "devDependencies": {
+    "@stryker-mutator/core": "9.6.1"
+  },
+  "overrides": {
+    "qs": "6.16.0"
+  }
+}

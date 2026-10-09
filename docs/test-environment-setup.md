@@ -56,7 +56,20 @@ A dedicated Notion test workspace and a public OAuth integration are required fo
 
 **Completion evidence:** Internal token available
 
-### 4. Store Credentials
+### 4. Share a Test Page with the Integration
+
+**Why:** Internal integrations cannot create workspace-level pages (REAL_API verified — E-026). The integration needs at least one page shared with it to serve as a parent for contract test pages.
+
+**Steps:**
+1. Create a page in the test workspace named "MCP Contract Tests Root"
+2. Click the ··· menu on the page → Connections → Add connections
+3. Select "notion-mcp-contract-tests" integration
+4. Note the page ID from the URL (the UUID after the page name)
+5. Add `NOTION_TEST_PARENT_PAGE_ID=<page-id>` to `.env`
+
+**Completion evidence:** Integration can access the shared page via `GET /v1/pages/{id}`
+
+### 5. Store Credentials
 
 **Local (.env):**
 ```bash

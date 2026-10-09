@@ -12,6 +12,7 @@ node_modules/
 # Build
 dist/
 *.gen.ts
+__pycache__/
 
 # IDE
 .vscode/
@@ -30,6 +31,9 @@ coverage/
 *.lcov
 stryker-tmp/
 reports/
+
+# Project-local scanner toolchain (downloaded binaries, temp, DB cache)
+.tools/
 
 # SBOM (generated, not committed)
 sbom.cdx.json

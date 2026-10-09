@@ -1,0 +1,16 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:17Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "POST /v1/search",
+    "sanitization": "workspace_id, request_id removed; token never captured",
+    "description": "Empty search result from workspace with no content shared with integration"
+  },
+  "object": "list",
+  "results": [],
+  "has_more": false,
+  "type": "page_or_data_source",
+  "next_cursor": null,
+  "request_id": "[REDACTED]"
+}

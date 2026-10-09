@@ -1,0 +1,15 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:17Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "POST /v1/pages",
+    "sanitization": "integration_id and request_id redacted",
+    "description": "Error when internal integration attempts to create workspace-level page. Internal integrations must use page_id or database_id parent."
+  },
+  "object": "error",
+  "status": 400,
+  "code": "validation_error",
+  "message": "Provide a `parent.page_id` or `parent.database_id` parameter to create a page, or use a public integration with `insert_content` capability. Internal integrations aren't owned by a single user, so creating workspace-level private pages is not supported.",
+  "request_id": "[REDACTED]"
+}

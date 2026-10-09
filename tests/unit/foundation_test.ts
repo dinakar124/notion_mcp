@@ -13,9 +13,13 @@ Deno.test('foundation: assertion library works', () => {
 });
 
 Deno.test('foundation: error detection works', () => {
-  assertThrows(() => {
-    throw new Error('expected');
-  }, Error, 'expected');
+  assertThrows(
+    () => {
+      throw new Error('expected');
+    },
+    Error,
+    'expected',
+  );
 });
 
 Deno.test('foundation: async test works', async () => {

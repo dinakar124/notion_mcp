@@ -1,0 +1,46 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:17Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "GET /v1/users",
+    "sanitization": "user IDs truncated to 8 chars, emails removed, names generalized",
+    "description": "User list from test workspace showing person + bot user types"
+  },
+  "object": "list",
+  "results": [
+    {
+      "object": "user",
+      "id": "[REDACTED-USER-UUID]",
+      "type": "person",
+      "name": "[REDACTED-PERSON-NAME]",
+      "avatar_url": null
+    },
+    {
+      "object": "user",
+      "id": "[REDACTED-BOT-1-UUID]",
+      "type": "bot",
+      "name": "notion-mcp-test",
+      "avatar_url": null,
+      "bot": {
+        "owner": { "type": "workspace", "workspace": true },
+        "workspace_name": "[REDACTED-WORKSPACE-NAME]"
+      }
+    },
+    {
+      "object": "user",
+      "id": "[REDACTED-BOT-2-UUID]",
+      "type": "bot",
+      "name": "notion-mcp-contract-tests",
+      "avatar_url": null,
+      "bot": {
+        "owner": { "type": "workspace", "workspace": true },
+        "workspace_name": "[REDACTED-WORKSPACE-NAME]"
+      }
+    }
+  ],
+  "has_more": false,
+  "type": "user",
+  "next_cursor": null,
+  "request_id": "[REDACTED]"
+}

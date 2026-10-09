@@ -1,0 +1,22 @@
+{
+  "_fixture_metadata": {
+    "source": "REAL_API",
+    "observed_at": "2026-10-09T08:17Z",
+    "notion_version": "2022-06-28",
+    "endpoint": "GET /v1/users/me",
+    "sanitization": "bot ID and workspace name redacted",
+    "description": "Bot self-identification showing owner type and workspace membership"
+  },
+  "object": "user",
+  "id": "[REDACTED-BOT-UUID]",
+  "type": "bot",
+  "name": "notion-mcp-contract-tests",
+  "avatar_url": null,
+  "bot": {
+    "owner": {
+      "type": "workspace",
+      "workspace": true
+    },
+    "workspace_name": "[REDACTED-WORKSPACE-NAME]"
+  }
+}

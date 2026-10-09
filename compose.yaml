@@ -1,10 +1,11 @@
 # Notion MCP Server — Local Development Services
 # Usage: docker compose up -d
+# State-loss test: docker compose --profile stateloss up redis-ephemeral
 # All services bind to localhost only. No external credentials required.
 
 services:
   postgres:
-    image: postgres:16.4-alpine
+    image: postgres:16.4-alpine@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c
     container_name: notion-mcp-postgres
     environment:
       POSTGRES_USER: notion_mcp
@@ -22,11 +23,44 @@ services:
       start_period: 10s
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     container_name: notion-mcp-redis
-    command: redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru
+    command: >-
+      redis-server
+      --save 60 1
+      --save 300 100
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
     ports:
       - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # Isolated empty-state Redis harness for state-loss scenario tests.
+  # No persistence, no shared volume with the normal Redis service.
+  # Point tests at port 6380 and recreate to obtain a guaranteed-empty store.
+  # Does not prove primary-endpoint reconnection or recovery behavior —
+  # Docker runtime verification remains TOOLING_BLOCKED.
+  redis-ephemeral:
+    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    container_name: notion-mcp-redis-ephemeral
+    profiles: ["stateloss"]
+    command: >-
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -70,3 +104,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

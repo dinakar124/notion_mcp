@@ -20,12 +20,32 @@ jobs:
   contract-tests:
     name: Real Notion Contract Tests
     runs-on: ubuntu-latest
-    # Only run if credentials are available
-    if: ${{ secrets.NOTION_TEST_WORKSPACE_TOKEN != '' }}
     environment: notion-contract
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - name: Validate all required credentials
+        run: |
+          missing=""
+          for var in NOTION_TEST_WORKSPACE_TOKEN NOTION_TEST_WORKSPACE_ID \
+                     NOTION_CLIENT_ID NOTION_CLIENT_SECRET \
+                     NOTION_WEBHOOK_VERIFICATION_TOKEN; do
+            val="${!var-}"
+            if [ -z "$val" ]; then
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            exit 1
+          fi
+          echo "All required credentials present."
+        env:
+          NOTION_TEST_WORKSPACE_TOKEN: ${{ secrets.NOTION_TEST_WORKSPACE_TOKEN }}
+          NOTION_TEST_WORKSPACE_ID: ${{ secrets.NOTION_TEST_WORKSPACE_ID }}
+          NOTION_CLIENT_ID: ${{ secrets.NOTION_CLIENT_ID }}
+          NOTION_CLIENT_SECRET: ${{ secrets.NOTION_CLIENT_SECRET }}
+          NOTION_WEBHOOK_VERIFICATION_TOKEN: ${{ secrets.NOTION_WEBHOOK_VERIFICATION_TOKEN }}
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: ${{ env.DENO_VERSION }}
       - name: Run contract tests

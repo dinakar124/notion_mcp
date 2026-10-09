@@ -3,13 +3,13 @@
 **Canonical source:** notion-mcp-product-spec-v3.md §8 (Tools, Resources, Prompts)
 **Notion API Version:** 2026-03-11
 **Date:** 2026-10-09
-**Status:** Complete — REAL VERIFICATION PENDING (no test workspace yet)
+**Status:** PARTIAL — OFFICIAL_DOC verified for key endpoints; REAL_API verification pending (no test workspace)
 
 ---
 
 ## Conflict Record
 
-**CONFLICT-001:** Product spec (§5, Flow 2) states OAuth token exchange returns `access_token + refresh_token + expires_in`. Official Notion API documentation for `POST /v1/oauth/token` (accessed 2026-10-09) does NOT include `expires_in` in the response schema. Response fields are: `access_token`, `token_type`, `refresh_token` (string|null), `bot_id`, `workspace_icon`, `workspace_name`, `workspace_id`, `owner`, `duplicated_template_id`, `request_id`. **Resolution:** Implementation must handle the absence of `expires_in`. Use refresh-on-401 strategy plus proactive refresh based on a configured TTL (e.g., 55 minutes). Mark for real-provider verification in Task 0.2.
+**CONFLICT-001:** Product spec (§5, Flow 2) states OAuth token exchange returns `access_token + refresh_token + expires_in`. Official Notion API documentation for `POST /v1/oauth/token` (accessed 2026-10-09, [reference](https://developers.notion.com/reference/refresh-a-token)) does NOT document `expires_in` in the response schema. Documented response fields are: `access_token`, `token_type`, `refresh_token` (string|null), `bot_id`, `workspace_icon`, `workspace_name`, `workspace_id`, `owner`, `duplicated_template_id`, `request_id`. **Status:** UNRESOLVED — absence from documentation does not prove live responses never include `expires_in`. REAL_API observation required. Implementation should use refresh-on-401 as primary mechanism; if live response includes `expires_in`, honor it; if absent, do not invent a TTL. No specific TTL value is justified — the previously recorded "55-minute TTL" was invented without evidence and is withdrawn. Mark for real-provider verification in Task 0.2.
 
 **CONFLICT-002:** Product spec states webhook event field is `id` (UUID). Notion official docs show the field name in the page.content_updated event payload. Real-provider verification needed to confirm exact field name. Mark for verification.
 
