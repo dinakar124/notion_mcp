@@ -26,7 +26,14 @@
         {
           "type": "text",
           "text": { "content": "Getting Started", "link": null },
-          "annotations": { "bold": false, "italic": false, "strikethrough": false, "underline": false, "code": false, "color": "default" },
+          "annotations": {
+            "bold": false,
+            "italic": false,
+            "strikethrough": false,
+            "underline": false,
+            "code": false,
+            "color": "default"
+          },
           "plain_text": "Getting Started",
           "href": null
         }
