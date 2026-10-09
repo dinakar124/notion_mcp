@@ -1,5 +1,6 @@
 import type { NotionGateway } from '../../application/ports/notion-gateway.ts';
-import { ProviderError } from '../../domain/errors.ts';
+import type { RequestContext } from '../../application/request-context.ts';
+import { ProviderError, requestCancelled } from '../../domain/errors.ts';
 import {
   type ContentBlock,
   type CreatedPage,
@@ -45,7 +46,8 @@ export class FakeNotionGateway implements NotionGateway {
     }
   }
 
-  search(query: SearchQuery): Promise<SearchResults> {
+  search(query: SearchQuery, { signal }: RequestContext): Promise<SearchResults> {
+    if (signal.aborted) return Promise.reject(requestCancelled(false));
     const needle = query.query.trim().toLowerCase();
     const nowMs = this.now().getTime();
     const matches = [...this.pages.values()]
@@ -68,7 +70,8 @@ export class FakeNotionGateway implements NotionGateway {
     });
   }
 
-  fetchPage(id: PageId): Promise<PageContent> {
+  fetchPage(id: PageId, { signal }: RequestContext): Promise<PageContent> {
+    if (signal.aborted) return Promise.reject(requestCancelled(false));
     const page = this.pages.get(id);
     if (!page) {
       return Promise.reject(new ProviderError('not_found', 'Page not found or not shared.'));
@@ -76,7 +79,8 @@ export class FakeNotionGateway implements NotionGateway {
     return Promise.resolve({ page: page.details, blocks: page.blocks, truncated: false });
   }
 
-  createPage(input: CreatePageInput): Promise<CreatedPage> {
+  createPage(input: CreatePageInput, { signal }: RequestContext): Promise<CreatedPage> {
+    if (signal.aborted) return Promise.reject(requestCancelled(false));
     if (!this.pages.has(input.parentPageId)) {
       return Promise.reject(
         new ProviderError('not_found', 'Parent page not found or not shared.'),

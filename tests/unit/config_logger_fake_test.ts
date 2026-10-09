@@ -1,6 +1,8 @@
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
+import type { RequestContext } from '../../src/application/request-context.ts';
 import { CONFIG_ENV_VARS, loadConfig } from '../../src/config/config.ts';
-import { ConfigError } from '../../src/domain/errors.ts';
+import { ConfigError, ProviderError } from '../../src/domain/errors.ts';
+import type { PageId } from '../../src/domain/notion.ts';
 import { JsonLogger } from '../../src/observability/logger.ts';
 import { FakeNotionGateway } from '../../src/adapters/fake/fake-notion-gateway.ts';
 import { SEED_PAGES } from '../../src/adapters/fake/seed-pages.ts';
@@ -229,25 +231,73 @@ Deno.test('logger: filters by level, writes JSON lines and redacts sensitive key
   });
 });
 
+const live: RequestContext = { signal: new AbortController().signal };
+const cancelled = (): RequestContext => ({ signal: AbortSignal.abort() });
+
 Deno.test('fake gateway: search ordering, filtering and pagination are deterministic', async () => {
   const gateway = new FakeNotionGateway();
-  const all = await gateway.search({ query: '', limit: 10 });
+  const all = await gateway.search({ query: '', limit: 10 }, live);
   assertEquals(all.pages.map((p) => p.title), [
     'Meeting notes: launch review',
     'Engineering roadmap',
     'Welcome to the demo workspace',
   ]);
-  assertEquals((await gateway.search({ query: 'LAUNCH', limit: 10 })).pages.length, 1);
-  assertEquals((await gateway.search({ query: 'zzz', limit: 10 })).pages, []);
+  assertEquals((await gateway.search({ query: 'LAUNCH', limit: 10 }, live)).pages.length, 1);
+  assertEquals((await gateway.search({ query: 'zzz', limit: 10 }, live)).pages, []);
   assertEquals(SEED_PAGES.length, 3);
 });
 
 Deno.test('fake gateway: invalid cursor is a typed invalid_request', async () => {
   let thrown: unknown;
   try {
-    await new FakeNotionGateway().search({ query: '', limit: 1, cursor: 'garbage' });
+    await new FakeNotionGateway().search({ query: '', limit: 1, cursor: 'garbage' }, live);
   } catch (error) {
     thrown = error;
   }
   assert(thrown instanceof Error && thrown.name === 'ProviderError');
+});
+
+Deno.test('fake gateway: a pre-aborted read is cancelled before touching anything', async () => {
+  const gateway = new FakeNotionGateway();
+  const known = SEED_PAGES[0]!.details.id;
+  for (
+    const call of [
+      () => gateway.search({ query: '', limit: 1, cursor: 'garbage' }, cancelled()),
+      () => gateway.fetchPage(known, cancelled()),
+      () => gateway.fetchPage('99999999-9999-4999-8999-999999999999' as PageId, cancelled()),
+    ]
+  ) {
+    const error = await assertRejects(call, ProviderError);
+    assertEquals([error.kind, error.code, error.outcomeUncertain], [
+      'cancelled',
+      'PROVIDER_CANCELLED',
+      false,
+    ]);
+  }
+});
+
+Deno.test('fake gateway: a pre-aborted create is cancelled and changes no state', async () => {
+  let idsRequested = 0;
+  const gateway = new FakeNotionGateway({
+    newId: () => {
+      idsRequested++;
+      return '22222222-2222-4222-8222-222222222201';
+    },
+  });
+  const before = await gateway.search({ query: '', limit: 25 }, live);
+
+  const input = { parentPageId: SEED_PAGES[0]!.details.id, title: 'Ghost', paragraphs: ['x'] };
+  const error = await assertRejects(() => gateway.createPage(input, cancelled()), ProviderError);
+  assertEquals([error.kind, error.outcomeUncertain], ['cancelled', false]);
+
+  assertEquals(idsRequested, 0);
+  assertEquals(await gateway.search({ query: '', limit: 25 }, live), before);
+  await assertRejects(
+    () => gateway.fetchPage('22222222-2222-4222-8222-222222222201' as PageId, live),
+    ProviderError,
+  );
+
+  const created = await gateway.createPage(input, live);
+  assertEquals(created.title, 'Ghost');
+  assertEquals(idsRequested, 1);
 });
