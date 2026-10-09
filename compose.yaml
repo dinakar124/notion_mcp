@@ -1,0 +1,72 @@
+# Notion MCP Server — Local Development Services
+# Usage: docker compose up -d
+# All services bind to localhost only. No external credentials required.
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: notion-mcp-postgres
+    environment:
+      POSTGRES_USER: notion_mcp
+      POSTGRES_PASSWORD: notion_mcp_dev
+      POSTGRES_DB: notion_mcp
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notion_mcp -d notion_mcp"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: notion-mcp-redis
+    command: redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  notion-fake:
+    build:
+      context: ./test-support/notion-fake
+      dockerfile: Dockerfile
+    container_name: notion-mcp-notion-fake
+    environment:
+      PORT: "8080"
+      HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3002:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  jwks-issuer:
+    build:
+      context: ./test-support/jwks-issuer
+      dockerfile: Dockerfile
+    container_name: notion-mcp-jwks-issuer
+    environment:
+      PORT: "8081"
+      HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3001:8081"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  pgdata:

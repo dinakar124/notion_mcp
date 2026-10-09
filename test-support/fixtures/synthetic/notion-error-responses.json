@@ -1,0 +1,77 @@
+{
+  "_metadata": {
+    "source": "SYNTHETIC_FIXTURE",
+    "description": "Notion API error responses for deterministic testing",
+    "created_at": "2026-10-09",
+    "notion_version": "2026-03-11",
+    "based_on": "Official docs at developers.notion.com/reference/status-codes"
+  },
+  "errors": {
+    "429_rate_limited": {
+      "status": 429,
+      "headers": {
+        "Retry-After": "1",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "object": "error",
+        "message": "Rate limited",
+        "code": "rate_limited",
+        "status": 429,
+        "additional_data": {}
+      }
+    },
+    "503_service_unavailable": {
+      "status": 503,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "object": "error",
+        "message": "Service unavailable",
+        "code": "service_unavailable",
+        "status": 503,
+        "additional_data": {}
+      }
+    },
+    "529_service_overload": {
+      "status": 529,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "object": "error",
+        "message": "Service overloaded",
+        "code": "service_overload",
+        "status": 529,
+        "additional_data": {}
+      }
+    },
+    "401_unauthorized": {
+      "status": 401,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "object": "error",
+        "message": "API token is invalid.",
+        "code": "unauthorized",
+        "status": 401,
+        "additional_data": {}
+      }
+    },
+    "404_not_found": {
+      "status": 404,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "object": "error",
+        "message": "Could not find page with ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.",
+        "code": "object_not_found",
+        "status": 404,
+        "additional_data": {}
+      }
+    }
+  }
+}

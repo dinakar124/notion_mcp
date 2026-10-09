@@ -1,0 +1,38 @@
+# Contract CI — Serialized real-Notion verification. Credential-gated.
+name: Contract CI
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Weekly Monday 6AM UTC
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-ci
+  cancel-in-progress: false  # Serialized: never run parallel against real Notion
+
+env:
+  DENO_VERSION: "2.9.7"
+
+jobs:
+  contract-tests:
+    name: Real Notion Contract Tests
+    runs-on: ubuntu-latest
+    # Only run if credentials are available
+    if: ${{ secrets.NOTION_TEST_WORKSPACE_TOKEN != '' }}
+    environment: notion-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - name: Run contract tests
+        run: deno task test:contract
+        env:
+          NOTION_TEST_WORKSPACE_TOKEN: ${{ secrets.NOTION_TEST_WORKSPACE_TOKEN }}
+          NOTION_TEST_WORKSPACE_ID: ${{ secrets.NOTION_TEST_WORKSPACE_ID }}
+          NOTION_CLIENT_ID: ${{ secrets.NOTION_CLIENT_ID }}
+          NOTION_CLIENT_SECRET: ${{ secrets.NOTION_CLIENT_SECRET }}
+          NOTION_WEBHOOK_VERIFICATION_TOKEN: ${{ secrets.NOTION_WEBHOOK_VERIFICATION_TOKEN }}

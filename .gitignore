@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Deno
+.deno/
+
+# Build
+dist/
+*.gen.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+.nyc_output/
+*.lcov
+stryker-tmp/
+reports/
+
+# SBOM (generated, not committed)
+sbom.cdx.json
+
+# Secrets and credentials — NEVER commit
+*.pem
+*.key
+*.p12
+*.pfx
+*.env
+secrets/

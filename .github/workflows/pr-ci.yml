@@ -1,0 +1,109 @@
+# PR CI — Deterministic tests only. No real Notion credentials.
+name: PR CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  DENO_VERSION: "2.9.7"
+
+jobs:
+  lint-check:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - name: Format check
+        run: deno task fmt:check
+      - name: Lint
+        run: deno task lint
+      - name: Type check
+        run: deno task check
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint-check
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_USER: notion_mcp
+          POSTGRES_PASSWORD: notion_mcp_dev
+          POSTGRES_DB: notion_mcp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notion_mcp -d notion_mcp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - name: Run unit tests
+        run: deno task test:unit
+      - name: Run integration tests
+        run: deno task test:integration
+        env:
+          DATABASE_URL: postgresql://notion_mcp:notion_mcp_dev@localhost:5432/notion_mcp
+          REDIS_URL: redis://localhost:6379
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for gitleaks
+      - name: Gitleaks — secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --verbose
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+      - name: Trivy — filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+  sbom:
+    name: SBOM Generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syft — generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: "."
+          format: "cyclonedx-json"
+          output-file: "sbom.cdx.json"
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json

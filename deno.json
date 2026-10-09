@@ -1,0 +1,51 @@
+{
+  "version": "0.0.0",
+  "name": "@notion-mcp/server",
+  "tasks": {
+    "check": "deno check src/**/*.ts tests/**/*.ts",
+    "lint": "deno lint src/ tests/ test-support/",
+    "fmt:check": "deno fmt --check src/ tests/ test-support/ migrations/",
+    "fmt": "deno fmt src/ tests/ test-support/ migrations/",
+    "test": "deno test --allow-read --allow-env --allow-net=localhost tests/unit/ tests/integration/",
+    "test:unit": "deno test --allow-read --allow-env tests/unit/",
+    "test:integration": "deno test --allow-read --allow-env --allow-net=localhost tests/integration/",
+    "test:conformance": "deno test --allow-read --allow-env --allow-net=localhost tests/conformance/",
+    "test:contract": "deno test --allow-read --allow-env --allow-net tests/contract/",
+    "dev": "deno run --watch --allow-read --allow-env --allow-net=localhost src/main.ts",
+    "build": "deno compile --allow-read --allow-env --allow-net src/main.ts",
+    "spike": "deno run --allow-read --allow-env --allow-net=localhost tests/spike/compatibility-spike.ts",
+    "gitleaks": "gitleaks detect --source . --verbose",
+    "sbom": "syft dir:. -o cyclonedx-json=sbom.cdx.json"
+  },
+  "imports": {
+    "@modelcontextprotocol/server": "npm:@modelcontextprotocol/server@^2.0.0",
+    "@modelcontextprotocol/core": "npm:@modelcontextprotocol/core@^2.0.0",
+    "@notionhq/client": "npm:@notionhq/client@5.27.0",
+    "postgres": "npm:postgres@3.4.5",
+    "ioredis": "npm:ioredis@5.6.1",
+    "zod": "npm:zod@3.24.4",
+    "@opentelemetry/api": "npm:@opentelemetry/api@1.9.0",
+    "fast-check": "npm:fast-check@3.23.2",
+    "@std/assert": "jsr:@std/assert@^1.0.0",
+    "@std/testing": "jsr:@std/testing@^1.0.0"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    },
+    "exclude": ["node_modules/", "*.gen.ts"]
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  },
+  "nodeModulesDir": "auto"
+}
