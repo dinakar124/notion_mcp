@@ -1,4 +1,4 @@
-import { ProviderError, type ProviderErrorKind } from '../../domain/errors.ts';
+import { ProviderError, type ProviderErrorKind, requestCancelled } from '../../domain/errors.ts';
 import { parseRetryAfterMs } from './retry-policy.ts';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
@@ -35,8 +35,15 @@ const MESSAGES: Record<ProviderErrorKind, string> = {
   rate_limited: 'Notion rate limit reached.',
   unavailable: 'Notion is temporarily unavailable.',
   timeout: 'Notion did not respond in time.',
+  cancelled: 'The request was cancelled.',
   bad_response: 'Notion returned a response this server could not understand.',
 };
+
+/**
+ * Statuses that prove Notion rejected the request without applying it. Everything else on a
+ * write (429, 409, 5xx, ...) leaves open that the change was made.
+ */
+const DEFINITE_REJECTIONS: ReadonlySet<number> = new Set([400, 401, 403, 404]);
 
 /** Builds a typed error from an upstream HTTP failure without copying the upstream message. */
 export function errorFromResponse(
@@ -51,7 +58,7 @@ export function errorFromResponse(
   return new ProviderError(kind, message, {
     requestId: sanitizeRequestId(response.headers.get('x-notion-request-id')),
     ...(retryAfterMs === null ? {} : { retryAfterMs }),
-    outcomeUncertain: !idempotent && response.status >= 500,
+    outcomeUncertain: !idempotent && !DEFINITE_REJECTIONS.has(response.status),
   });
 }
 
@@ -66,7 +73,16 @@ function extractProviderCode(bodyText: string): string | undefined {
   return undefined;
 }
 
-export function networkError(cause: unknown, idempotent: boolean): ProviderError {
+/**
+ * A failure while the request was (or may have been) on the wire. Cancellation by the caller
+ * is told apart from the client's own timeout by the caller's signal, not by the error shape.
+ */
+export function networkError(
+  cause: unknown,
+  idempotent: boolean,
+  cancelledByCaller: boolean,
+): ProviderError {
+  if (cancelledByCaller) return requestCancelled(!idempotent);
   const timedOut = cause instanceof DOMException && cause.name === 'TimeoutError';
   return new ProviderError(
     timedOut ? 'timeout' : 'unavailable',
@@ -75,9 +91,15 @@ export function networkError(cause: unknown, idempotent: boolean): ProviderError
   );
 }
 
-export function badResponse(requestId?: string, cause?: unknown): ProviderError {
+/** `outcomeUncertain` is true for a 2xx whose body is unusable: the write was most likely applied. */
+export function badResponse(
+  requestId?: string,
+  cause?: unknown,
+  outcomeUncertain = false,
+): ProviderError {
   return new ProviderError('bad_response', MESSAGES.bad_response, {
     ...(requestId === undefined ? {} : { requestId }),
+    outcomeUncertain,
     cause,
   });
 }

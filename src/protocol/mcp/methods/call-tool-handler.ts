@@ -1,3 +1,4 @@
+import type { RequestContext } from '../../../application/request-context.ts';
 import type { ToolRegistry } from '../../../application/tools/tool-registry.ts';
 import { AppError, InvalidArgumentsError, UnknownToolError } from '../../../domain/errors.ts';
 import { isJsonObject, type JsonObject } from '../../../domain/json.ts';
@@ -16,7 +17,7 @@ export class CallToolHandler implements McpMethodHandler {
 
   constructor(private readonly registry: ToolRegistry, private readonly logger: Logger) {}
 
-  async handle(request: McpRequest): Promise<JsonObject> {
+  async handle(request: McpRequest, context: RequestContext): Promise<JsonObject> {
     const name = request.params.name as string;
     if ('inputResponses' in request.params || 'requestState' in request.params) {
       throw McpProtocolError.invalidParams('Multi-round-trip requests are not supported');
@@ -26,7 +27,7 @@ export class CallToolHandler implements McpMethodHandler {
 
     const startedAt = performance.now();
     try {
-      const output = await this.registry.get(name).execute(args);
+      const output = await this.registry.get(name).execute(args, context);
       this.logger.info('tool.completed', { tool: name, durationMs: elapsed(startedAt) });
       return toolSuccessResult(output);
     } catch (error) {

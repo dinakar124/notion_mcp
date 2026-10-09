@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { NotionGateway } from '../ports/notion-gateway.ts';
+import type { RequestContext } from '../request-context.ts';
 import { pageIdSchema } from './page-id-schema.ts';
 import { SchemaTool, type ToolOutput } from './tool.ts';
 
@@ -21,8 +22,11 @@ export class NotionFetchPageTool extends SchemaTool<typeof fetchSchema> {
     }, fetchSchema);
   }
 
-  protected async run(input: z.output<typeof fetchSchema>): Promise<ToolOutput> {
-    const { page, blocks, truncated } = await this.gateway.fetchPage(input.page_id);
+  protected async run(
+    input: z.output<typeof fetchSchema>,
+    context: RequestContext,
+  ): Promise<ToolOutput> {
+    const { page, blocks, truncated } = await this.gateway.fetchPage(input.page_id, context);
     return {
       summary: `Fetched "${page.title}" (${blocks.length} block(s)${
         truncated ? ', truncated' : ''

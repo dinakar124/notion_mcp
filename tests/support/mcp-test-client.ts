@@ -24,6 +24,8 @@ export interface CallOptions {
   readonly headers?: Record<string, string | null>;
   readonly meta?: Record<string, unknown> | null;
   readonly id?: unknown;
+  /** Cancellation signal carried by the inbound request, as a disconnecting client would. */
+  readonly signal?: AbortSignal;
 }
 
 export function testConfig(env: Record<string, string> = {}): AppConfig {
@@ -71,12 +73,18 @@ export function mcpBody(
 export class McpTestClient {
   constructor(private readonly handle: (request: Request) => Promise<Response>) {}
 
-  async post(path: string, body: unknown, headers: Record<string, string>): Promise<RpcResponse> {
+  async post(
+    path: string,
+    body: unknown,
+    headers: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse> {
     const response = await this.handle(
       new Request(`http://127.0.0.1${path}`, {
         method: 'POST',
         headers,
         body: typeof body === 'string' ? body : JSON.stringify(body),
+        ...(signal === undefined ? {} : { signal }),
       }),
     );
     return { status: response.status, body: await response.json(), headers: response.headers };
@@ -93,10 +101,14 @@ export class McpTestClient {
       if (value === null) delete headers[key];
       else headers[key] = value;
     }
-    return this.post('/mcp', mcpBody(method, params, options), headers);
+    return this.post('/mcp', mcpBody(method, params, options), headers, options.signal);
   }
 
-  callTool(name: string, args: Record<string, unknown>): Promise<RpcResponse> {
-    return this.call('tools/call', { name, arguments: args });
+  callTool(
+    name: string,
+    args: Record<string, unknown>,
+    options: CallOptions = {},
+  ): Promise<RpcResponse> {
+    return this.call('tools/call', { name, arguments: args }, options);
   }
 }

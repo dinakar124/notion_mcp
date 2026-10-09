@@ -1,4 +1,4 @@
-import { ProviderError } from '../../domain/errors.ts';
+import { ProviderError, requestCancelled } from '../../domain/errors.ts';
 import type { Logger } from '../../observability/logger.ts';
 import {
   badResponse,
@@ -28,36 +28,42 @@ interface RetrySignal {
   retryAfterHeader?: string | null;
 }
 
-/** Authenticated Notion HTTP client with timeouts, bounded retries and typed failures. */
+/**
+ * Authenticated Notion HTTP client with timeouts, cancellation, bounded retries of idempotent
+ * requests and typed failures. A non-idempotent request is sent at most once.
+ */
 export class NotionHttpClient implements NotionTransport {
   constructor(
     private readonly options: NotionHttpClientOptions,
     private readonly deps: NotionHttpClientDeps,
   ) {}
 
-  async request(request: NotionRequest): Promise<unknown> {
+  async request(request: NotionRequest, signal: AbortSignal): Promise<unknown> {
     for (let attempt = 1;; attempt++) {
+      if (signal.aborted) throw requestCancelled(false);
+
       let failure: ProviderError;
-      let signal: RetrySignal = {};
+      let retrySignal: RetrySignal = {};
 
       try {
-        const response = await this.send(request);
+        const response = await this.send(request, signal);
         const text = await response.text();
-        if (response.ok) return this.parseSuccess(response, text);
+        if (response.ok) return this.parseSuccess(request, response, text);
         failure = errorFromResponse(response, text, request.idempotent);
-        signal = {
+        retrySignal = {
           status: response.status,
           retryAfterHeader: response.headers.get('retry-after'),
         };
       } catch (error) {
         if (error instanceof ProviderError) throw error;
-        failure = networkError(error, request.idempotent);
+        failure = networkError(error, request.idempotent, signal.aborted);
       }
 
+      if (signal.aborted) throw failure;
       const delayMs = this.deps.retryPolicy.delayBeforeRetry({
         attempt,
         idempotent: request.idempotent,
-        ...signal,
+        ...retrySignal,
       });
       if (delayMs === null) throw failure;
       this.deps.logger.warn('notion.retry', {
@@ -70,7 +76,7 @@ export class NotionHttpClient implements NotionTransport {
     }
   }
 
-  private send(request: NotionRequest): Promise<Response> {
+  private send(request: NotionRequest, signal: AbortSignal): Promise<Response> {
     const hasBody = request.body !== undefined;
     return this.deps.fetch(`${this.options.baseUrl}${request.path}`, {
       method: request.method,
@@ -81,16 +87,20 @@ export class NotionHttpClient implements NotionTransport {
         ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       },
       body: hasBody ? JSON.stringify(request.body) : undefined,
-      signal: AbortSignal.timeout(this.options.timeoutMs),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(this.options.timeoutMs)]),
       redirect: 'error',
     });
   }
 
-  private parseSuccess(response: Response, text: string): unknown {
+  private parseSuccess(request: NotionRequest, response: Response, text: string): unknown {
     try {
       return JSON.parse(text);
     } catch (cause) {
-      throw badResponse(sanitizeRequestId(response.headers.get('x-notion-request-id')), cause);
+      throw badResponse(
+        sanitizeRequestId(response.headers.get('x-notion-request-id')),
+        cause,
+        !request.idempotent,
+      );
     }
   }
 }

@@ -9,6 +9,7 @@ export type ProviderErrorKind =
   | 'rate_limited'
   | 'unavailable'
   | 'timeout'
+  | 'cancelled'
   | 'bad_response';
 
 export type ErrorCode =
@@ -80,6 +81,20 @@ export interface ProviderErrorOptions {
   /** True when the provider may have applied the operation despite the failure. */
   outcomeUncertain?: boolean;
   cause?: unknown;
+}
+
+/**
+ * The caller cancelled. `outcomeUncertain` is true when a write may already have reached
+ * the provider and been applied.
+ */
+export function requestCancelled(outcomeUncertain: boolean): ProviderError {
+  return new ProviderError(
+    'cancelled',
+    outcomeUncertain
+      ? 'The request was cancelled after it may have reached Notion; the outcome is unknown.'
+      : 'The request was cancelled.',
+    { outcomeUncertain },
+  );
 }
 
 /** A failure reported by (or while talking to) the Notion provider. */
