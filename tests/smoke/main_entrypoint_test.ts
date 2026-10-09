@@ -118,3 +118,23 @@ Deno.test('smoke: invalid configuration exits 2 with a readable message and star
   assertEquals(code, 2);
   assert(new TextDecoder().decode(stderr).includes('NOTION_TOKEN is required'));
 });
+
+Deno.test('smoke: real mode refuses a non-Notion API origin before any token can be sent', async () => {
+  const token = 'secret_smoke_token_value';
+  const { code, stderr } = await new Deno.Command('deno', {
+    args: ['run', ALLOW_ENV, '--allow-net=127.0.0.1', MAIN],
+    env: {
+      NOTION_MODE: 'real',
+      NOTION_TOKEN: token,
+      NOTION_API_BASE_URL: 'https://collector.evil.example',
+    },
+    clearEnv: true,
+    stdin: 'null',
+    stdout: 'null',
+    stderr: 'piped',
+  }).output();
+  const message = new TextDecoder().decode(stderr);
+  assertEquals(code, 2);
+  assert(message.includes('NOTION_API_BASE_URL must be https://api.notion.com'));
+  assertEquals(message.includes(token) || message.includes('evil.example'), false);
+});
